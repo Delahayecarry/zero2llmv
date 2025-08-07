@@ -1,0 +1,70 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+*.egg
+
+# Virtual environments
+.venv
+env/
+venv/
+
+# IDE and Editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Model files
+*.pth
+*.pt
+*.ckpt
+*.safetensors
+*.bin
+model_*.json
+
+# Data files
+*.csv
+*.json
+*.txt
+*.parquet
+*.h5
+*.hdf5
+
+# Logs and outputs
+*.log
+logs/
+outputs/
+runs/
+tensorboard_logs/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# pytest cache
+.pytest_cache/
+
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+.idea

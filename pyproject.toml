@@ -1,0 +1,12 @@
+[project]
+name = "zero2llmv"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "ruff>=0.12.7",
+    "torch>=2.8.0",
+    "torchvision>=0.23.0",
+    "transformers>=4.55.0",
+]

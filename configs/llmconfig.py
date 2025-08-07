@@ -1,0 +1,57 @@
+from transformers import PretrainedConfig
+
+class llmconfig(PretrainedConfig):
+    model_type = "zero2llm-v"
+
+    def __init__(
+            self,
+            dropout: float = 0.1,  # Dropout概率，用于防止过拟合
+            bos_token_id: int = 0,  # 开始序列token的ID
+            eos_token_id: int = 1,  # 结束序列token的ID
+            hidden_act: str = "gelu",  # 隐藏层激活函数类型
+            hidden_size: int = 768,  # 隐藏层维度大小
+            intermediate_size: int = None,  # FFN中间层维度，如果为None则自动计算
+            max_positions_embeddings: int = 512,  # 最大位置编码长度
+            num_attention_heads: int = 12,  # 注意力头数量
+            num_key_value_heads: int = 12,  # 键值对注意力头数量（用于分组查询注意力）
+            vocab_size: int = 30000,  # 词汇表大小
+            rms_norm_eps: float = 1e-5,  # RMS归一化的epsilon值
+            rope_theta: int = 100000.0,  # RoPE位置编码的theta参数
+            flash_attn: bool = True,  # 是否使用Flash Attention（需要torch >= 2.0）
+
+            # MOE（专家混合）相关参数
+            use_moe: bool = False,  # 是否启用专家混合模型
+            num_experts_per_token: int = 1,  # 每个token使用的专家数量
+            n_routed_experts: int = 2,  # 路由专家的数量
+            n_shared_experts: int = 2,  # 共享专家的数量
+            scoring_function: str = "softmax",  # 专家评分函数类型
+            aux_loss_alpha: float = 0.0,  # 辅助损失的权重系数
+            seq_aux: bool = True,  # 是否使用序列级辅助损失
+            norm_topk_prob: bool = True,  # 是否对top-k概率进行归一化
+            **kwargs
+    ):
+        super().__init__(**kwargs)
+        self.dropout = dropout
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.hidden_act = hidden_act
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.max_positions_embeddings = max_positions_embeddings
+        self.num_attention_heads = num_attention_heads
+        self.num_key_value_heads = num_key_value_heads
+        self.vocab_size = vocab_size
+        self.rms_norm_eps = rms_norm_eps
+        self.rope_theta = rope_theta
+        self.flash_attn = flash_attn
+        # MOE
+        self.use_moe = use_moe
+        self.num_experts_per_token = num_experts_per_token
+        self.n_routed_experts = n_routed_experts
+        self.n_shared_experts = n_shared_experts
+        self.scoring_function = scoring_function
+        self.aux_loss_alpha = aux_loss_alpha
+        self.seq_aux = seq_aux
+        self.norm_topk = norm_topk_prob
+
+

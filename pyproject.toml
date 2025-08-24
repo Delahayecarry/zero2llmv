@@ -1,12 +1,60 @@
 [project]
 name = "zero2llmv"
-version = "0.1.0"
-description = "Add your description here"
+version = "0.2.0"
+description = "支持YAML配置的多模态大语言模型训练框架"
 readme = "README.md"
+authors = [
+    {name = "Zero2LLMV Team"}
+]
+license = {text = "MIT"}
 requires-python = ">=3.10"
 dependencies = [
-    "ruff>=0.12.7",
+    "pydantic>=2.11.7",
+    "pyyaml>=6.0.2",
     "torch>=2.8.0",
     "torchvision>=0.23.0",
     "transformers>=4.55.0",
+    "swanlab>=0.3.0",
+    "tqdm>=4.66.0",
+    "numpy>=1.26.0",
+    "Pillow>=10.0.0",
+    "pytest>=8.4.1",
+    "pytest-cov>=6.2.1",
 ]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.12.7",
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "isort>=5.12.0"
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[project.scripts]
+zero2llmv-train = "zero2llmv.train:main"
+
+[tool.ruff]
+line-length = 100
+select = ["E", "F", "W", "I"]
+ignore = ["E501", "W503"]
+
+[tool.black]
+line-length = 100
+target-version = ['py310']
+
+[tool.isort]
+profile = "black"
+line_length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_functions = "test_*"

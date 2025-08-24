@@ -1,0 +1,20 @@
+# High Learning Rate Experiment
+#
+# This experiment uses a higher learning rate to test faster convergence
+# while maintaining all other parameters from the base configuration.
+
+# Override base configuration with higher learning rate
+training:
+  learning_rate: 5.0e-5  # 2.5x higher than default
+  
+  # Reduce warmup steps since we're using higher LR
+  warmup_steps: 200
+  
+  # Slightly more conservative gradient clipping
+  max_grad_norm: 0.5
+
+# Add experiment-specific wandb configuration
+wandb:
+  name: "high-lr-experiment"
+  notes: "Testing higher learning rate (5e-5) for faster convergence"
+  tags: ["high-lr", "experiment", "convergence-test"]

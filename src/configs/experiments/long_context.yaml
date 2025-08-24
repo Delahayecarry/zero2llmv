@@ -1,0 +1,39 @@
+# Long Context Experiment
+#
+# This experiment tests training with longer sequence lengths
+# for tasks that require more context understanding.
+
+# Increase sequence length for long context tasks
+data:
+  max_seq_length: 2048  # 4x longer than default
+  
+  # Reduce batch size to fit longer sequences in GPU memory
+  batch_size: 2
+  
+  # Reduce workers to save memory
+  num_workers: 2
+
+training:
+  # Increase gradient accumulation to maintain effective batch size
+  gradient_accumulation_steps: 16  # Effective batch = 2 * 16 = 32
+  
+  # Lower learning rate for stability with long sequences
+  learning_rate: 1.0e-5
+  
+  # More warmup for stability
+  warmup_steps: 1000
+  
+  # Enable AMP for memory efficiency
+  use_amp: true
+
+# Adjust checkpointing for potentially slower training
+checkpoints:
+  logging_steps: 50    # More detailed monitoring
+  eval_steps: 200      # Frequent evaluation due to slower training
+  save_steps: 400      # More frequent saves for long experiments
+
+# Experiment tracking
+wandb:
+  name: "long-context-experiment" 
+  notes: "Training with 2048 sequence length for long context understanding"
+  tags: ["long-context", "seq2048", "memory-optimized", "experiment"]

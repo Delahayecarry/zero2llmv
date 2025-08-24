@@ -1,0 +1,34 @@
+# Zero2LLMV 测试训练实验配置
+# 用于验证SwanLab监控集成
+
+model:
+  model_type: "llm"              # 使用LLM模式进行快速测试
+  model_config_path: ""
+
+data:
+  data_path: "data/test"         # 测试数据路径
+  max_seq_length: 128            # 较短序列长度，加快训练
+  batch_size: 2                  # 小批量大小，适合测试
+  num_workers: 1
+
+training:
+  num_epochs: 2                  # 只训练2个epoch用于测试
+  learning_rate: 5e-4            # 稍高的学习率，便于观察变化
+  weight_decay: 0.01
+  warmup_steps: 10               # 少量warmup步骤
+  gradient_accumulation_steps: 2  # 梯度累积
+  max_grad_norm: 1.0
+  use_amp: false                 # 禁用混合精度，简化测试
+
+checkpoints:
+  output_dir: "./test_outputs"   # 测试输出目录
+  save_steps: 50                 # 频繁保存检查点用于测试
+  logging_steps: 5               # 频繁记录日志
+  eval_steps: 20
+
+swanlab:
+  project: "VLLM"                    # SwanLab项目名
+  workspace: "yourworkspace"         # 工作空间
+  experiment_name: "test-integration"  # 测试实验名
+  description: "测试SwanLab监控集成的简单实验"  
+  logdir: "./swanlab_logs"           # 本地日志目录

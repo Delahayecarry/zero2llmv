@@ -1,0 +1,34 @@
+# LLM-Only Training Experiment
+#
+# This experiment trains a language model without vision components
+# for text-only tasks and comparison with VLM performance.
+
+# Switch to LLM-only architecture
+model:
+  model_type: "llm"  # No vision components
+
+# Standard text-focused configuration
+data:
+  max_seq_length: 1024  # Good balance for text tasks
+  batch_size: 16        # Can use larger batch without vision processing
+  num_workers: 8        # More workers for text-only data loading
+
+training:
+  # Standard hyperparameters for LLM training
+  num_epochs: 5
+  learning_rate: 3.0e-5
+  gradient_accumulation_steps: 2  # Effective batch = 16 * 2 = 32
+  warmup_steps: 500
+  weight_decay: 0.1     # Slightly higher weight decay for text
+  
+# Standard checkpointing
+checkpoints:
+  logging_steps: 100
+  eval_steps: 500  
+  save_steps: 1000
+
+# Experiment tracking
+wandb:
+  name: "llm-only-experiment"
+  notes: "Training LLM architecture for text-only tasks without vision"
+  tags: ["llm-only", "text-only", "no-vision", "baseline", "experiment"]

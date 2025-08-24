@@ -1,0 +1,32 @@
+# Large Batch Size Experiment
+#
+# This experiment uses a larger effective batch size to test training stability
+# and potentially improved performance from better gradient estimates.
+
+# Increase effective batch size through gradient accumulation
+data:
+  batch_size: 4  # Reduce per-GPU batch size to fit larger effective batch in memory
+
+training:
+  gradient_accumulation_steps: 16  # 4x increase for effective batch of 64
+  
+  # Adjust learning rate for larger batch size (linear scaling rule)
+  learning_rate: 8.0e-5  # 4x higher for 4x larger effective batch
+  
+  # More warmup steps for stability with large batch
+  warmup_steps: 1000
+  
+  # Longer training since large batches may need more steps
+  num_epochs: 5
+
+# Adjust logging for longer training
+checkpoints:
+  logging_steps: 50   # More frequent logging for detailed monitoring
+  eval_steps: 250     # More frequent evaluation
+  save_steps: 500     # More frequent saves for large batch experiments
+
+# Experiment tracking
+wandb:
+  name: "large-batch-experiment"
+  notes: "Testing large effective batch size (64) with adjusted learning rate"
+  tags: ["large-batch", "batch64", "lr-scaling", "experiment"]

@@ -1,25 +1,63 @@
-# Python-generated files
+# Python 相关
 __pycache__/
 *.py[oc]
+*.pyo
+*.pyd
+.Python
 build/
+develop-eggs/
 dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
 wheels/
-*.egg-info
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
 *.egg
+MANIFEST
 
-# Virtual environments
+# 虚拟环境
+.env
 .venv
 env/
 venv/
+ENV/
+env.bak/
+venv.bak/
 
-# IDE and Editor files
+# PyCharm
 .idea/
+
+# VS Code
 .vscode/
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+*.ipynb
+
+# pytest
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# 编辑器和OS相关
 *.swp
 *.swo
 *~
-
-# OS generated files
 .DS_Store
 .DS_Store?
 ._*
@@ -27,44 +65,64 @@ venv/
 .Trashes
 ehthumbs.db
 Thumbs.db
+Thumbs.db:encryptable
 
-# Model files
+# 机器学习相关
+# 模型文件
 *.pth
 *.pt
 *.ckpt
 *.safetensors
 *.bin
-model_*.json
-
-# Data files
-*.csv
-*.json
-*.txt
-*.parquet
 *.h5
 *.hdf5
+*.pkl
+*.pickle
 
-# Logs and outputs
+# 配置和日志
 *.log
 logs/
 outputs/
 runs/
+checkpoints/
+wandb/
+.wandb/
 tensorboard_logs/
+mlruns/
 
-# Temporary files
+# 数据文件
+*.csv
+*.json
+*.txt
+*.parquet
+*.arrow
+*.feather
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+# 大文件和缓存
 *.tmp
 *.temp
 .cache/
+.huggingface/
 
-# Jupyter Notebook checkpoints
-.ipynb_checkpoints/
+# 特定于项目
+weights/
+models/vision_model/
+!weights/.gitkeep
 
-# pytest cache
-.pytest_cache/
+# 临时配置文件
+config_*.yaml
+!configs/config.yaml
+!configs/experiments/
 
-# Coverage reports
-htmlcov/
-.coverage
-.coverage.*
-coverage.xml
-.idea
+# 系统特定
+.python-version
+
+# uv相关
+.venv/
+uv.lock
+
+tests/

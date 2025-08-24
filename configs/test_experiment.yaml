@@ -28,7 +28,48 @@ checkpoints:
 
 swanlab:
   project: "VLLM"                    # SwanLab项目名
-  workspace: "yourworkspace"         # 工作空间
+  workspace: "testworkspace"         # 工作空间
   experiment_name: "test-integration"  # 测试实验名
   description: "测试SwanLab监控集成的简单实验"  
-  logdir: "./swanlab_logs"           # 本地日志目录
+  logdir: "./swanlab_logs"
+
+  # 本地日志目录
+
+  #class TrainingConfig:
+  #    """训练配置类"""
+  #    # 模型配置
+  #    model_type: str = "vlm"  # 模型类型: "llm" or "vlm"
+  #    model_config_path: str = ""  # 模型配置文件路径
+  #
+  #    # 数据配置
+  #    data_path: str = "data/processed"  # 训练数据路径
+  #    max_seq_length: int = 512  # 最大序列长度
+  #    batch_size: int = 8  # 批次大小
+  #    num_workers: int = 4  # 数据加载器线程数
+  #
+  #    # 训练配置
+  #    num_epochs: int = 3  # 训练轮数
+  #    learning_rate: float = 2e-5  # 学习率
+  #    weight_decay: float = 0.01  # 权重衰减
+  #    warmup_steps: int = 500  # 预热步数
+  #    gradient_accumulation_steps: int = 4  # 梯度累积步数
+  #    max_grad_norm: float = 1.0  # 梯度裁剪阈值
+  #
+  #    # 混合精度训练
+  #    use_amp: bool = True  # 是否使用自动混合精度
+  #
+  #    # 保存与日志
+  #    output_dir: str = "outputs"  # 输出目录
+  #    save_steps: int = 1000  # 保存检查点的步数间隔
+  #    logging_steps: int = 100  # 日志记录的步数间隔
+  #    eval_steps: int = 500  # 评估的步数间隔
+  #
+  #    # SwanLab配置
+  #    swanlab_project: str = "VLLM"  # swanlab项目名
+  #    swanlab_workspace: str = "delahayecarry"  # swanlab工作空间
+  #    swanlab_experiment_name: str = ""  # 实验名称
+  #    swanlab_description: str = ""  # 实验描述
+  #    swanlab_logdir: str = ""  # 日志目录
+  #
+  #    # SwanLab API配置
+  #    swanlab_api_key: str = ""  # API密钥

@@ -9,8 +9,11 @@ import sys
 import json
 import argparse
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 from dataclasses import dataclass, field
+from PIL import Image
+import torchvision.transforms as transforms
+from transformers import PreTrainedTokenizerFast
 
 # 添加src目录到Python路径
 sys.path.insert(0, str(Path(__file__).parent / "src"))
@@ -46,6 +49,8 @@ class TrainingConfig:
     
     # 数据配置
     data_path: str = "data/processed"  # 训练数据路径
+    image_dir: str = "data/images"  # 图片目录路径
+    tokenizer_path: str = "tokenizer"  # tokenizer路径
     max_seq_length: int = 512  # 最大序列长度
     batch_size: int = 8  # 批次大小
     num_workers: int = 4  # 数据加载器线程数
@@ -78,36 +83,163 @@ class TrainingConfig:
     swanlab_api_key: str = ""  # API密钥
 
 
-class SimpleDataset(Dataset):
-    """简单的训练数据集"""
+class MultimodalDataset(Dataset):
+    """多模态对话数据集 - 支持JSONL格式"""
     
-    def __init__(self, data_path: str, config: TrainingConfig):
+    def __init__(self, data_path: str, image_dir: str, config: TrainingConfig):
         self.data_path = Path(data_path)
+        self.image_dir = Path(image_dir)
         self.config = config
-        self.samples = self.load_samples()
         
-    def load_samples(self) -> List[Dict]:
-        """加载训练样本"""
+        # 加载tokenizer
+        self.tokenizer = self._load_tokenizer(config.tokenizer_path)
+        
+        # 图像预处理
+        self.image_transform = transforms.Compose([
+            transforms.Resize((224, 224)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], 
+                               std=[0.229, 0.224, 0.225])
+        ])
+        
+        self.samples = self.load_jsonl_samples()
+    
+    def _load_tokenizer(self, tokenizer_path: str) -> PreTrainedTokenizerFast:
+        """加载训练好的tokenizer"""
+        try:
+            # 首先检查tokenizer目录是否存在
+            tokenizer_dir = Path(tokenizer_path)
+            if not tokenizer_dir.exists():
+                print(f"⚠️  tokenizer路径不存在: {tokenizer_path}")
+
+
+                tokenizer = Tokenizer.from_pretrained("gpt2")
+                # 添加特殊token
+
+                return tokenizer
+            
+            tokenizer = PreTrainedTokenizerFast.from_pretrained(tokenizer_path)
+            print(f"✅ 成功加载tokenizer: {tokenizer_path}")
+            print(f"词汇表大小: {tokenizer.vocab_size}")
+            return tokenizer
+        except Exception as e:
+            print(f"❌ 加载tokenizer失败: {e}")
+            print("使用GPT2Tokenizer作为备选方案...")
+            from transformers import GPT2Tokenizer
+            tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+            # 添加特殊token
+            special_tokens = {
+                "pad_token": "<pad>",
+                "unk_token": "<unk>",
+                "bos_token": "<bos>", 
+                "eos_token": "<eos>",
+                "additional_special_tokens": ["<|user|>", "<|assistant|>", "<|endoftext|>", "@"]
+            }
+            tokenizer.add_special_tokens(special_tokens)
+            print(f"✅ 使用GPT2Tokenizer，词汇表大小: {tokenizer.vocab_size}")
+            return tokenizer
+        
+    def load_jsonl_samples(self) -> List[Dict]:
+        """加载JSONL格式的训练样本"""
         samples = []
         
-        # 这里应该根据你的实际数据格式来实现
-        # 示例：假设有一个samples.json文件
-        samples_file = self.data_path / "samples.json"
-        if samples_file.exists():
-            with open(samples_file, 'r', encoding='utf-8') as f:
-                samples = json.load(f)
-        else:
-            # 创建一些示例数据
-            print(f"未找到 {samples_file}，创建示例数据...")
-            samples = [
-                {
-                    "text": "这是一个示例文本",
-                    "image_path": None,
-                    "label": "示例标签"
-                } for _ in range(100)
-            ]
+        if not self.data_path.exists():
+            print(f"警告: 数据文件 {self.data_path} 不存在")
+            return samples
             
+        with open(self.data_path, 'r', encoding='utf-8') as f:
+            for line_num, line in enumerate(f, 1):
+                try:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    
+                    sample = json.loads(line)
+                    
+                    # 验证数据格式
+                    if not self._validate_sample(sample):
+                        print(f"跳过第 {line_num} 行: 数据格式不符合要求")
+                        continue
+                        
+                    samples.append(sample)
+                    
+                except json.JSONDecodeError as e:
+                    print(f"第 {line_num} 行JSON解析错误: {e}")
+                    continue
+                except Exception as e:
+                    print(f"第 {line_num} 行处理错误: {e}")
+                    continue
+                    
+        print(f"成功加载 {len(samples)} 个训练样本")
         return samples
+    
+    def _validate_sample(self, sample: Dict) -> bool:
+        """验证单个样本的数据格式"""
+        # 检查必需字段
+        if "conversations" not in sample:
+            return False
+        if "image" not in sample:
+            return False
+            
+        # 验证conversations字段
+        conversations = sample["conversations"]
+        if not isinstance(conversations, list) or len(conversations) == 0:
+            return False
+            
+        # 验证每个对话项
+        for conv in conversations:
+            if not isinstance(conv, dict):
+                return False
+            if "role" not in conv or "content" not in conv:
+                return False
+            if conv["role"] not in ["user", "assistant"]:
+                return False
+            if not isinstance(conv["content"], str):
+                return False
+                
+        # 验证image字段
+        if not isinstance(sample["image"], str) or not sample["image"]:
+            return False
+            
+        return True
+        
+    def _process_conversations(self, conversations: List[Dict]) -> str:
+        """将对话转换为训练文本，处理<image>标记"""
+        processed_text = ""
+        
+        for conv in conversations:
+            role = conv["role"]
+            content = conv["content"]
+            
+            # 处理<image>标记 - 替换为@符号序列（196个@代表ViT patches）
+            if "<image>" in content:
+                content = content.replace("<image>", "@" * 196)
+            
+            # 添加角色标识
+            if role == "user":
+                processed_text += f"<|user|>\n{content}\n"
+            elif role == "assistant":
+                processed_text += f"<|assistant|>\n{content}\n"
+        
+        # 添加结束标识
+        processed_text += "<|endoftext|>"
+        
+        return processed_text
+        
+    def _load_image(self, image_path: str) -> Optional[torch.Tensor]:
+        """加载和预处理图像"""
+        full_image_path = self.image_dir / image_path
+        
+        if not full_image_path.exists():
+            print(f"警告: 图像文件 {full_image_path} 不存在")
+            return None
+            
+        try:
+            image = Image.open(full_image_path).convert('RGB')
+            return self.image_transform(image)
+        except Exception as e:
+            print(f"图像加载错误 {full_image_path}: {e}")
+            return None
     
     def __len__(self):
         return len(self.samples)
@@ -115,14 +247,40 @@ class SimpleDataset(Dataset):
     def __getitem__(self, idx):
         sample = self.samples[idx]
         
-        # 这里应该实现实际的数据处理逻辑
-        # 包括文本tokenization、图像处理等
+        # 处理对话文本
+        conversations = sample["conversations"]
+        processed_text = self._process_conversations(conversations)
+        
+        # 加载图像
+        image_path = sample["image"]
+        pixel_values = self._load_image(image_path)
+        
+        # 使用真实tokenizer进行编码
+        encoding = self.tokenizer(
+            processed_text,
+            max_length=self.config.max_seq_length,
+            padding="max_length",
+            truncation=True,
+            return_tensors="pt"
+        )
+        
+        # 提取编码结果
+        input_ids = encoding["input_ids"].squeeze(0)  # 移除batch维度
+        attention_mask = encoding["attention_mask"].squeeze(0)
+        
+        # 对于语言建模任务，labels通常与input_ids相同
+        # 但可能需要对特殊token位置进行mask
+        labels = input_ids.clone()
+        
+        # 可选：mask掉padding token的labels（设为-100，PyTorch会忽略）
+        labels[attention_mask == 0] = -100
+        
         return {
-            "text": sample.get("text", ""),
-            "input_ids": torch.randint(0, 30000, (self.config.max_seq_length,)),  # 示例
-            "attention_mask": torch.ones(self.config.max_seq_length),
-            "labels": torch.randint(0, 30000, (self.config.max_seq_length,)),
-            "pixel_values": torch.randn(1, 3, 224, 224) if sample.get("image_path") else None
+            "text": processed_text,
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "labels": labels,
+            "pixel_values": pixel_values
         }
 
 
@@ -167,7 +325,7 @@ class Trainer:
         self.model.to(self.device)
         
         # 初始化数据
-        self.train_dataset = SimpleDataset(config.data_path, config)
+        self.train_dataset = MultimodalDataset(config.data_path, config.image_dir, config)
         self.train_dataloader = DataLoader(
             self.train_dataset,
             batch_size=config.batch_size,

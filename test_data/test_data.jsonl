@@ -1,1 +1,0 @@
-{"conversations": [{"role": "user", "content": "提供给定图像的简要描述。\n<image>"}, {"role": "assistant", "content": "这是一个红色的测试图像。"}], "image": "test_image.jpg"}

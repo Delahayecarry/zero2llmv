@@ -1,6 +1,6 @@
 """
 VLM训练数据集 - 支持JSONL格式的多模态对话数据
-适配MiniMind-V训练器架构
+适配Zero2LLMV训练框架
 """
 
 import json

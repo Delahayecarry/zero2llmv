@@ -1,0 +1,95 @@
+# 调试训练配置 - 小规模快速测试
+# 适用于云服务器调试和代码验证
+
+model:
+  model_type: "vlm"
+  # 最小模型配置用于调试
+  hidden_size: 256        # 大幅减小
+  num_hidden_layers: 2    # 只用2层
+  max_seq_len: 128        # 短序列长度
+  use_moe: false
+  vision_model_path: "src/models/vision_model"
+  llm_weights_dir: "out"
+
+data:
+  # 测试数据配置
+  data_path: "dataset/debug_data.jsonl"    # 需要创建小数据集
+  images_path: "dataset/debug_images"      # 需要创建小图片集
+  batch_size: 2           # 最小batch size
+  num_workers: 2          # 减少worker数量
+  max_seq_length: 128     # 与模型配置一致
+
+training:
+  # 快速调试训练参数
+  num_epochs: 1           # 只训练1个epoch
+  learning_rate: 1e-4     # 较小学习率
+  weight_decay: 0.01
+  
+  # 最小化训练配置
+  accumulation_steps: 1   # 不使用梯度累积
+  grad_clip: 1.0
+  warmup_iters: 10        # 很少的warmup步数
+  
+  # 混合精度 - 适配不同GPU
+  dtype: "float16"        # 使用float16而非bfloat16
+  use_amp: true
+  
+  # 优化器设置
+  optimizer: "adamw"
+  beta1: 0.9
+  beta2: 0.999
+  eps: 1e-8
+  
+  # 设备配置
+  device: "cuda"
+
+checkpoints:
+  # 输出配置
+  output_dir: "debug_out"
+  save_interval: 50       # 更频繁保存用于调试
+  log_interval: 10        # 更频繁日志输出
+  
+  # 单GPU训练
+  ddp: false
+  local_rank: -1
+
+# 调试性能配置
+performance:
+  # 保守的优化设置
+  cuda_compile: false     # 调试时关闭编译优化
+  flash_attention: false  # 调试时关闭FlashAttention
+  gradient_checkpointing: true  # 节省内存
+  
+  # 内存优化
+  pin_memory: false       # 调试时关闭
+  persistent_workers: false
+  prefetch_factor: 1
+
+swanlab:
+  # 调试项目配置
+  project: "zerollm-v-debug"
+  experiment_name: "vlm-debug-test"
+  description: "VLM训练流程调试测试"
+  
+  logdir: "./debug_logs"
+  tags: ["debug", "test", "vlm"]
+
+# VLM特定配置
+vlm_specific:
+  # 调试时只训练projection层
+  freeze_llm: true
+  freeze_vision_encoder: true
+  trainable_modules: ["vision_proj"]
+  
+  image_special_token: "<image>"
+
+# 系统配置
+system:
+  random_seed: 42         # 固定种子便于复现
+  ignore_warnings: false  # 调试时显示警告
+  log_level: "DEBUG"      # 详细日志输出
+  
+  # 调试模式特殊配置
+  debug_mode: true
+  max_steps: 100          # 最多100步就停止
+  eval_interval: 25       # 每25步评估一次

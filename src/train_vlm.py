@@ -34,36 +34,12 @@ except ImportError:
         sys.exit(1)
 
 try:
-    # 尝试导入模型模块（用户需要提供）
-    try:
-        from src.models.model_vlm import MiniMindVLM, VLMConfig
-    except ImportError:
-        # 备选路径
-        from model.model_vlm import MiniMindVLM, VLMConfig
-except ImportError:
-    print("警告: 未找到MiniMindVLM和VLMConfig定义")
-    print("请创建以下文件之一:")
-    print("  - src/models/model_vlm.py")
-    print("  - model/model_vlm.py")
-    print("")
-    print("该文件应包含MiniMindVLM类和VLMConfig类的定义")
-    
-    # 提供基本的配置类用于演示
-    class VLMConfig:
-        def __init__(self, hidden_size=512, num_hidden_layers=8, max_seq_len=640, use_moe=False, **kwargs):
-            self.hidden_size = hidden_size
-            self.num_hidden_layers = num_hidden_layers
-            self.max_seq_len = max_seq_len
-            self.use_moe = use_moe
-            self.image_special_token = "<image>"
-            for k, v in kwargs.items():
-                setattr(self, k, v)
-    
-    class MiniMindVLM:
-        def __init__(self, config, vision_model_path=None):
-            print("警告: 使用模拟的MiniMindVLM类")
-            print("请提供真实的模型实现以进行训练")
-            raise NotImplementedError("需要真实的MiniMindVLM实现")
+    # 导入实际的VLM模型
+    from src.models.vision_encoder import VLM, VLLMconfig
+    print("✓ 成功导入VLM模型和配置")
+except ImportError as e:
+    print(f"错误: 无法导入VLM模型: {e}")
+    sys.exit(1)
 
 # 导入配置加载器
 try:
@@ -172,31 +148,59 @@ def train_epoch(epoch, swanlab_run, config, device="cuda:0"):
 
 
 def init_model(config):
-    # 创建默认的VLM配置
-    model_config = VLMConfig(
-        hidden_size=512, 
-        num_hidden_layers=8,
-        max_seq_len=config.data.max_seq_length,
-        use_moe=False
+    # 从配置读取模型参数，避免硬编码
+    model_config = VLLMconfig(
+        dim=getattr(config.model, 'hidden_size', 512),
+        n_layers=getattr(config.model, 'num_hidden_layers', 8),
+        max_seq_len=getattr(config.model, 'max_seq_len', getattr(config.data, 'max_seq_length', 640)),
+        use_moe=getattr(config.model, 'use_moe', False)
     )
     
-    tokenizer = AutoTokenizer.from_pretrained('../model', use_fast=True)
+    # 基于项目根目录处理 tokenizer 路径
+    tok_dir = project_root / 'tokenizer'
+    if not tok_dir.exists():
+        raise FileNotFoundError(f"Tokenizer 目录不存在: {tok_dir}")
+    
+    tokenizer = AutoTokenizer.from_pretrained(str(tok_dir), use_fast=True)
+    
+    # 处理视觉模型路径 - 支持配置或默认值
+    vision_model_path = getattr(config.model, 'vision_model_path', 'src/models/vision_model')
+    vision_path = Path(vision_model_path)
+    if not vision_path.is_absolute():
+        vision_path = project_root / vision_path
+    vision_model_path = str(vision_path.resolve())
+    
     moe_path = '_moe' if model_config.use_moe else ''
-    # 加载纯语言模型权重
-    ckp = f'{config.checkpoints.output_dir}/llm_{model_config.hidden_size}{moe_path}.pth'
-    model = MiniMindVLM(model_config, vision_model_path="../model/vision_model/clip-vit-base-patch16")
+    
+    # 基于项目根目录处理权重文件路径
+    output_dir = Path(config.checkpoints.output_dir)
+    if not output_dir.is_absolute():
+        output_dir = project_root / output_dir
+    ckp = output_dir / f'llm_{model_config.dim}{moe_path}.pth'
+    
+    model = VLM(model_config, vision_model_path=vision_model_path)
     
     # 如果权重文件存在则加载
-    if os.path.exists(ckp):
-        state_dict = torch.load(ckp, map_location="cuda:0" if torch.cuda.is_available() else "cpu")
+    if ckp.exists():
+        state_dict = torch.load(str(ckp), map_location="cuda:0" if torch.cuda.is_available() else "cpu")
         model.load_state_dict(state_dict, strict=False)
     else:
         print(f"警告: 权重文件 {ckp} 不存在，使用随机初始化")
 
-    # 冻结除 vision_proj 外的所有参数
-    for name, param in model.named_parameters():
-        if 'vision_proj' not in name:
-            param.requires_grad = False
+    # 应用冻结策略
+    freeze_llm = getattr(config, 'vlm_specific', None) and getattr(config.vlm_specific, 'freeze_llm', True)
+    freeze_vision = getattr(config, 'vlm_specific', None) and getattr(config.vlm_specific, 'freeze_vision_encoder', True)
+    trainable_modules = getattr(config, 'vlm_specific', None) and getattr(config.vlm_specific, 'trainable_modules', ['vision_proj'])
+    
+    if freeze_llm or freeze_vision:
+        for name, param in model.named_parameters():
+            should_freeze = True
+            if trainable_modules:
+                for module_name in trainable_modules:
+                    if module_name in name:
+                        should_freeze = False
+                        break
+            param.requires_grad = not should_freeze
 
     Logger(f'zerollm-v VLM可训练参数量：{sum(p.numel() for p in model.parameters() if p.requires_grad) / 1e6:.3f} 百万')
 
@@ -240,24 +244,24 @@ def init_swanlab(config):
         else:
             experiment_name = f"zerollm-v-vlm-{config.training.num_epochs}epochs-bs{config.data.batch_size}-lr{config.training.learning_rate}"
         
-        # 初始化SwanLab运行
+        # 安全读取配置，使用 getattr 防止属性缺失
         swanlab_config = {
-            "model_type": config.model.model_type,
-            "hidden_size": config.model.hidden_size,
-            "num_layers": config.model.num_hidden_layers,
+            "model_type": getattr(config.model, 'model_type', 'vlm'),
+            "hidden_size": getattr(config.model, 'hidden_size', 512),
+            "num_layers": getattr(config.model, 'num_hidden_layers', 8),
             "batch_size": config.data.batch_size,
             "learning_rate": config.training.learning_rate,
             "num_epochs": config.training.num_epochs,
-            "max_seq_len": config.model.max_seq_len,
-            "use_moe": config.model.use_moe
+            "max_seq_len": getattr(config.model, 'max_seq_len', getattr(config.data, 'max_seq_length', 640)),
+            "use_moe": getattr(config.model, 'use_moe', False)
         }
         
         run = swanlab.init(
             project=config.swanlab.project,
             experiment_name=experiment_name,
-            description=config.swanlab.description,
+            description=getattr(config.swanlab, 'description', ''),
             config=swanlab_config,
-            logdir=config.swanlab.logdir if hasattr(config.swanlab, 'logdir') else None
+            logdir=getattr(config.swanlab, 'logdir', None)
         )
         
         print(f"SwanLab 初始化成功: {experiment_name}")
@@ -271,10 +275,14 @@ def init_swanlab(config):
         return None
 
 if __name__ == "__main__":
-    # 加载配置文件
-    config_path = "../configs/vlm_training.yaml"
-    if len(sys.argv) > 1:
-        config_path = sys.argv[1]
+    # 加载配置文件 - 支持位置参数和 --config 选项
+    import argparse
+    parser = argparse.ArgumentParser(description="VLM训练脚本")
+    parser.add_argument('config_path', nargs='?', default=None, help="配置文件路径（位置参数）")
+    parser.add_argument("--config", dest='config', default=None, help="配置文件路径")
+    args = parser.parse_args()
+    
+    config_path = args.config or args.config_path or 'configs/vlm_training.yaml'
     
     print(f"zerollm-v VLM 训练启动 - 加载配置: {config_path}")
     config = load_config(config_path)
@@ -310,14 +318,22 @@ if __name__ == "__main__":
     # 初始化模型
     model, tokenizer, preprocess, model_config = init_model(config)
     
-    # 创建数据集
-    images_path = config.data.data_path.replace('pretrain_data.jsonl', 'pretrain_images')
+    # 处理图像路径 - 优先使用配置中的 images_path
+    images_path = getattr(config.data, 'images_path', None)
+    if not images_path:
+        # 回退到智能推断
+        images_path = config.data.data_path.replace('pretrain_data.jsonl', 'pretrain_images').replace('debug_data.jsonl', 'debug_images')
+    
+    # 确保图像路径基于项目根目录
+    img_path = Path(images_path)
+    if not img_path.is_absolute():
+        img_path = project_root / img_path
     train_ds = VLMDataset(
         config.data.data_path, 
-        images_path, 
+        str(img_path), 
         tokenizer, 
         preprocess=preprocess,
-        image_special_token='<image>',
+        image_special_token=getattr(config, 'vlm_specific', None) and getattr(config.vlm_specific, 'image_special_token', '<image>') or '<image>',
         max_length=config.data.max_seq_length
     )
     
@@ -332,12 +348,30 @@ if __name__ == "__main__":
         sampler=train_sampler
     )
     
-    # 初始化优化器和混合精度
-    scaler = torch.cuda.amp.GradScaler(enabled=(config.training.dtype in ['float16', 'bfloat16']))
+    # 安全检查：防止空数据集
+    iter_per_epoch = len(train_loader)
+    if iter_per_epoch == 0:
+        raise ValueError(f'训练集为空: {config.data.data_path}')
+    
+    # AMP 和 CUDA 兼容性处理
+    use_amp = getattr(config.training, 'use_amp', True) and torch.cuda.is_available()
+    dtype_mapping = {'float16': torch.float16, 'bfloat16': torch.bfloat16, 'float32': torch.float32}
+    amp_dtype = dtype_mapping.get(getattr(config.training, 'dtype', 'float16'), torch.float16)
+    
+    # 混合精度设置
+    ctx = nullcontext() if not use_amp else torch.cuda.amp.autocast(dtype=amp_dtype)
+    scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
+    
+    # 优化器设置
+    optimizer_params = {
+        'lr': config.training.learning_rate,
+        'weight_decay': getattr(config.training, 'weight_decay', 0.01),
+        'betas': (getattr(config.training, 'beta1', 0.9), getattr(config.training, 'beta2', 0.999)),
+        'eps': getattr(config.training, 'eps', 1e-8)
+    }
     optimizer = optim.AdamW(
         filter(lambda p: p.requires_grad, model.parameters()), 
-        lr=config.training.learning_rate,
-        weight_decay=getattr(config.training, 'weight_decay', 0.01)
+        **optimizer_params
     )
     
     # 分布式训练设置
@@ -345,9 +379,7 @@ if __name__ == "__main__":
         model._ddp_params_and_buffers_to_ignore = {"pos_cis"}
         model = DistributedDataParallel(model, device_ids=[ddp_local_rank])
     
-    # 开始训练
-    iter_per_epoch = len(train_loader)
-    print(f"\n\u5f00始 zerollm-v VLM 训练:")
+    print(f"\n开始 zerollm-v VLM 训练:")
     print(f"- 训练轮数: {config.training.num_epochs}")
     print(f"- 批处理大小: {config.data.batch_size}")
     print(f"- 学习率: {config.training.learning_rate}")

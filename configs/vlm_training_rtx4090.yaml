@@ -1,0 +1,103 @@
+# RTX 4090 优化配置
+# 根据RTX 4090硬件特性优化的VLM训练配置
+
+model:
+  model_type: "vlm"
+  # 模型结构配置
+  hidden_size: 512
+  num_hidden_layers: 8
+  max_seq_len: 1024        # 🔧 增加到1024以充分利用显存
+  use_moe: false
+  # 视觉模型路径
+  vision_model_path: "../model/vision_model/clip-vit-base-patch16"
+  # LLM权重路径（用于初始化）
+  llm_weights_dir: "../out"
+
+data:
+  # 数据路径
+  data_path: "../dataset/pretrain_data.jsonl"
+  images_path: "../dataset/pretrain_images"
+  # 数据加载配置 - RTX 4090优化
+  batch_size: 32           # 🔧 从16增加到32，充分利用24GB显存
+  num_workers: 12          # 🔧 增加到12，匹配CPU核心数
+  max_seq_length: 1024     # 🔧 与模型配置保持一致
+
+training:
+  # 训练超参数
+  num_epochs: 4
+  learning_rate: 2e-4      # 🔧 降低学习率适应更大batch size
+  weight_decay: 0.01
+  
+  # 训练控制 - 优化GPU利用率
+  accumulation_steps: 2    # 🔧 有效batch size = 32 * 2 = 64
+  grad_clip: 1.0
+  warmup_iters: 500        # 🔧 添加warmup稳定训练
+  
+  # 混合精度设置 - RTX 4090最优
+  dtype: "bfloat16"
+  use_amp: true
+  
+  # 优化器设置
+  optimizer: "adamw"
+  beta1: 0.9
+  beta2: 0.95             # 🔧 更适合大模型的beta2值
+  eps: 1e-8
+  
+  # 设备配置
+  device: "cuda:0"
+
+checkpoints:
+  # 输出和保存
+  output_dir: "../out"
+  save_interval: 200       # 🔧 减少保存频率，提高训练效率
+  log_interval: 50         # 🔧 增加日志频率，更好监控
+  
+  # 分布式训练
+  ddp: false
+  local_rank: -1
+
+# 性能优化配置
+performance:
+  # CUDA优化
+  cuda_compile: true       # 🔧 启用CUDA编译优化
+  flash_attention: true    # 🔧 启用FlashAttention节省显存
+  gradient_checkpointing: false  # 🔧 24GB显存足够，不需要梯度检查点
+  
+  # 内存优化
+  pin_memory: true
+  persistent_workers: true
+  prefetch_factor: 2
+
+swanlab:
+  # zerollm-v 项目配置
+  project: "zerollm-v"
+  experiment_name: "vlm-rtx4090-optimized"
+  description: "RTX 4090优化的zerollm-v VLM预训练实验"
+  
+  # SwanLab日志配置
+  logdir: "./swanlab_logs"
+  
+  # 运行配置
+  tags: ["vlm", "pretrain", "rtx4090", "optimized"]
+  
+# 模型特定配置
+vlm_specific:
+  # 冻结策略：只训练vision_proj层
+  freeze_llm: true
+  freeze_vision_encoder: true
+  trainable_modules: ["vision_proj"]
+  
+  # 图像处理
+  image_special_token: "<image>"
+  
+# 系统配置
+system:
+  # 随机种子
+  random_seed: 1337
+  
+  # 警告过滤
+  ignore_warnings: true
+  
+  # 日志级别
+  log_level: "INFO"
+  

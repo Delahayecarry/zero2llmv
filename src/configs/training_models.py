@@ -21,6 +21,36 @@ class ModelConfigModel(BaseModel):
         default="",
         description="模型配置文件路径（可选）"
     )
+    hidden_size: int = Field(
+        default=512,
+        gt=0,
+        le=8192,
+        description="模型隐藏层大小 (1-8192)"
+    )
+    num_hidden_layers: int = Field(
+        default=8,
+        ge=1,
+        le=128,
+        description="隐藏层数量 (1-128)"
+    )
+    max_seq_len: int = Field(
+        default=1024,
+        gt=0,
+        le=32768,
+        description="最大序列长度 (1-32768)"
+    )
+    use_moe: bool = Field(
+        default=False,
+        description="是否使用 MoE (Mixture of Experts)"
+    )
+    vision_model_path: str = Field(
+        default="src/models/vision_model",
+        description="视觉模型路径"
+    )
+    llm_weights_dir: str = Field(
+        default="out",
+        description="语言模型权重目录"
+    )
     
     @field_validator('model_type')
     @classmethod
@@ -37,6 +67,10 @@ class DataConfigModel(BaseModel):
     data_path: str = Field(
         default="../dataset/pretrain_data.jsonl",
         description="训练数据目录路径"
+    )
+    images_path: Optional[str] = Field(
+        default=None,
+        description="图像数据目录路径（可选，未设置时自动推断）"
     )
     max_seq_length: int = Field(
         default=512,
@@ -92,11 +126,22 @@ class TrainingHyperparamsModel(BaseModel):
         ge=0,
         description="学习率调度器的预热步数"
     )
+    warmup_iters: int = Field(
+        default=500,
+        ge=0,
+        description="预热迭代次数（与warmup_steps等效）"
+    )
     gradient_accumulation_steps: int = Field(
         default=4,
         ge=1,
         le=128,
         description="梯度累积步数 (1-128)"
+    )
+    accumulation_steps: int = Field(
+        default=4,
+        ge=1,
+        le=128,
+        description="梯度累积步数的别名"
     )
     max_grad_norm: float = Field(
         default=1.0,
@@ -104,9 +149,44 @@ class TrainingHyperparamsModel(BaseModel):
         le=10,
         description="梯度裁剪的最大梯度范数 (0-10)"
     )
+    grad_clip: float = Field(
+        default=1.0,
+        gt=0,
+        le=10,
+        description="梯度裁剪值（与max_grad_norm等效）"
+    )
     use_amp: bool = Field(
         default=True,
         description="是否使用自动混合精度训练"
+    )
+    dtype: Literal["float16", "bfloat16", "float32"] = Field(
+        default="float16",
+        description="训练精度类型"
+    )
+    optimizer: str = Field(
+        default="adamw",
+        description="优化器类型"
+    )
+    beta1: float = Field(
+        default=0.9,
+        ge=0,
+        le=1,
+        description="Adam优化器beta1参数"
+    )
+    beta2: float = Field(
+        default=0.999,
+        ge=0,
+        le=1,
+        description="Adam优化器beta2参数"
+    )
+    eps: float = Field(
+        default=1e-8,
+        gt=0,
+        description="Adam优化器epsilon参数"
+    )
+    device: str = Field(
+        default="cuda",
+        description="训练设备"
     )
     
     @field_validator('learning_rate')
@@ -149,15 +229,33 @@ class CheckpointsConfigModel(BaseModel):
         gt=0,
         description="检查点保存间隔步数"
     )
+    save_interval: int = Field(
+        default=200,
+        gt=0,
+        description="保存间隔（与save_steps等效）"
+    )
     logging_steps: int = Field(
         default=100,
         gt=0,
         description="日志记录间隔步数"
     )
+    log_interval: int = Field(
+        default=50,
+        gt=0,
+        description="日志间隔（与logging_steps等效）"
+    )
     eval_steps: int = Field(
         default=500,
         gt=0,
         description="评估运行间隔步数"
+    )
+    ddp: bool = Field(
+        default=False,
+        description="是否使用分布式数据并行"
+    )
+    local_rank: int = Field(
+        default=-1,
+        description="本地进程rank"
     )
     
     @field_validator('output_dir')
@@ -192,6 +290,86 @@ class CheckpointsConfigModel(BaseModel):
             )
         
         return self
+
+
+class VLMSpecificConfigModel(BaseModel):
+    """VLM特定配置。"""
+    
+    freeze_llm: bool = Field(
+        default=True,
+        description="是否冻结语言模型"
+    )
+    freeze_vision_encoder: bool = Field(
+        default=True,
+        description="是否冻结视觉编码器"
+    )
+    trainable_modules: List[str] = Field(
+        default=["vision_proj"],
+        description="可训练的模块列表"
+    )
+    image_special_token: str = Field(
+        default="<image>",
+        description="图像特殊token"
+    )
+
+
+class PerformanceConfigModel(BaseModel):
+    """性能优化配置。"""
+    
+    cuda_compile: bool = Field(
+        default=False,
+        description="是否启用CUDA编译优化"
+    )
+    flash_attention: bool = Field(
+        default=False,
+        description="是否启用FlashAttention"
+    )
+    gradient_checkpointing: bool = Field(
+        default=True,
+        description="是否启用梯度检查点"
+    )
+    pin_memory: bool = Field(
+        default=False,
+        description="是否固定内存"
+    )
+    persistent_workers: bool = Field(
+        default=False,
+        description="是否使用持久化工作进程"
+    )
+    prefetch_factor: int = Field(
+        default=1,
+        ge=1,
+        description="预取因子"
+    )
+
+
+class SystemConfigModel(BaseModel):
+    """系统配置。"""
+    
+    random_seed: int = Field(
+        default=42,
+        description="随机种子"
+    )
+    ignore_warnings: bool = Field(
+        default=False,
+        description="是否忽略警告"
+    )
+    log_level: str = Field(
+        default="INFO",
+        description="日志级别"
+    )
+    debug_mode: bool = Field(
+        default=False,
+        description="调试模式"
+    )
+    max_steps: Optional[int] = Field(
+        default=None,
+        description="最大训练步数"
+    )
+    eval_interval: int = Field(
+        default=100,
+        description="评估间隔"
+    )
 
 
 class SwanLabConfigModel(BaseModel):
@@ -258,6 +436,18 @@ class TrainingConfigModel(BaseModel):
     swanlab: SwanLabConfigModel = Field(
         default_factory=SwanLabConfigModel,
         description="SwanLab 实验跟踪配置"
+    )
+    vlm_specific: VLMSpecificConfigModel = Field(
+        default_factory=VLMSpecificConfigModel,
+        description="VLM特定配置"
+    )
+    performance: PerformanceConfigModel = Field(
+        default_factory=PerformanceConfigModel,
+        description="性能优化配置"
+    )
+    system: SystemConfigModel = Field(
+        default_factory=SystemConfigModel,
+        description="系统配置"
     )
     
     class Config:

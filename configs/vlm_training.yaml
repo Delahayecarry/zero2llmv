@@ -1,84 +1,34 @@
 # zerollm-v VLM训练配置
-# VLM (Vision-Language Model) 预训练专用配置文件
+# 与pydantic模型兼容的配置文件
 
 model:
   model_type: "vlm"
-  # 模型结构配置
-  hidden_size: 512
-  num_hidden_layers: 8
-  max_seq_len: 640
-  use_moe: false
-  # 视觉模型路径
-  vision_model_path: "../model/vision_model/clip-vit-base-patch16"
-  # LLM权重路径（用于初始化）
-  llm_weights_dir: "../out"
+  model_config_path: ""
 
 data:
-  # 数据路径
   data_path: "../dataset/pretrain_data.jsonl"
-  images_path: "../dataset/pretrain_images"
-  # 数据加载配置
+  max_seq_length: 640
   batch_size: 16
   num_workers: 8
-  max_seq_length: 640
 
 training:
-  # 训练超参数
   num_epochs: 4
   learning_rate: 4e-4
   weight_decay: 0.01
-  
-  # 训练控制
-  accumulation_steps: 1
-  grad_clip: 1.0
-  warmup_iters: 0
-  
-  # 混合精度设置
-  dtype: "bfloat16"
+  warmup_steps: 0
+  gradient_accumulation_steps: 1
+  max_grad_norm: 1.0
   use_amp: true
-  
-  # 设备配置
-  device: "cuda:0"  # 如果有CUDA可用，否则使用CPU
 
 checkpoints:
-  # 输出和保存
   output_dir: "../out"
-  save_interval: 100
-  log_interval: 100
-  
-  # 分布式训练
-  ddp: false
-  local_rank: -1
+  save_steps: 200
+  logging_steps: 50
+  eval_steps: 500
 
 swanlab:
-  # zerollm-v 项目配置
   project: "zerollm-v"
+  workspace: "delahayecarry"
   experiment_name: "vlm-pretrain"
   description: "zerollm-v VLM预训练实验 - 支持图像理解的多模态大语言模型"
-  
-  # SwanLab日志配置
   logdir: "./swanlab_logs"
-  
-  # 运行配置
-  tags: ["vlm", "pretrain", "multimodal"]
-  
-# 模型特定配置
-vlm_specific:
-  # 冻结策略：只训练vision_proj层
-  freeze_llm: true
-  freeze_vision_encoder: true
-  trainable_modules: ["vision_proj"]
-  
-  # 图像处理
-  image_special_token: "<image>"
-  
-# 系统配置
-system:
-  # 随机种子
-  random_seed: 1337
-  
-  # 警告过滤
-  ignore_warnings: true
-  
-  # 日志级别
-  log_level: "INFO"

@@ -22,33 +22,73 @@ from transformers import AutoTokenizer, AutoModel
 
 # 导入项目模块
 try:
-    # 尝试导入模型模块（需要用户提供）
-    from model.model_vlm import MiniMindVLM, VLMConfig
-    from dataset.lm_dataset import VLMDataset
-except ImportError as e:
-    print(f"警告: 无法导入模型模块: {e}")
-    print("请确保model.model_vlm和dataset.lm_dataset模块可用")
-    sys.exit(1)
+    # 导入数据集模块
+    from src.dataset.vlm_dataset import VLMDataset
+except ImportError:
+    try:
+        # 备选路径
+        from dataset.vlm_dataset import VLMDataset
+    except ImportError as e:
+        print(f"错误: 无法导入VLMDataset: {e}")
+        print("请确保src/dataset/vlm_dataset.py文件存在")
+        sys.exit(1)
+
+try:
+    # 尝试导入模型模块（用户需要提供）
+    try:
+        from src.models.model_vlm import MiniMindVLM, VLMConfig
+    except ImportError:
+        # 备选路径
+        from model.model_vlm import MiniMindVLM, VLMConfig
+except ImportError:
+    print("警告: 未找到MiniMindVLM和VLMConfig定义")
+    print("请创建以下文件之一:")
+    print("  - src/models/model_vlm.py")
+    print("  - model/model_vlm.py")
+    print("")
+    print("该文件应包含MiniMindVLM类和VLMConfig类的定义")
+    
+    # 提供基本的配置类用于演示
+    class VLMConfig:
+        def __init__(self, hidden_size=512, num_hidden_layers=8, max_seq_len=640, use_moe=False, **kwargs):
+            self.hidden_size = hidden_size
+            self.num_hidden_layers = num_hidden_layers
+            self.max_seq_len = max_seq_len
+            self.use_moe = use_moe
+            self.image_special_token = "<image>"
+            for k, v in kwargs.items():
+                setattr(self, k, v)
+    
+    class MiniMindVLM:
+        def __init__(self, config, vision_model_path=None):
+            print("警告: 使用模拟的MiniMindVLM类")
+            print("请提供真实的模型实现以进行训练")
+            raise NotImplementedError("需要真实的MiniMindVLM实现")
 
 # 导入配置加载器
 try:
-    from configs.config_loader import load_yaml_config
-    from configs.training_models import TrainingConfigModel
+    from src.configs.config_loader import load_yaml_config
+    from src.configs.training_models import TrainingConfigModel
 except ImportError:
-    # 如果配置模块不存在，提供简单的YAML加载功能
-    def load_yaml_config(config_path):
-        with open(config_path, 'r', encoding='utf-8') as f:
-            return yaml.safe_load(f)
-    
-    class SimpleConfig:
-        def __init__(self, config_dict):
-            for key, value in config_dict.items():
-                if isinstance(value, dict):
-                    setattr(self, key, SimpleConfig(value))
-                else:
-                    setattr(self, key, value)
-    
-    TrainingConfigModel = SimpleConfig
+    try:
+        # 备选路径
+        from configs.config_loader import load_yaml_config
+        from configs.training_models import TrainingConfigModel
+    except ImportError:
+        # 如果配置模块不存在，提供简单的YAML加载功能
+        def load_yaml_config(config_path):
+            with open(config_path, 'r', encoding='utf-8') as f:
+                return yaml.safe_load(f)
+        
+        class SimpleConfig:
+            def __init__(self, config_dict):
+                for key, value in config_dict.items():
+                    if isinstance(value, dict):
+                        setattr(self, key, SimpleConfig(value))
+                    else:
+                        setattr(self, key, value)
+        
+        TrainingConfigModel = SimpleConfig
 
 
 def Logger(content):
@@ -60,14 +100,14 @@ def get_lr(current_step, total_steps, lr):
     return lr / 10 + 0.5 * lr * (1 + math.cos(math.pi * current_step / total_steps))
 
 
-def train_epoch(epoch, swanlab_run, config):
+def train_epoch(epoch, swanlab_run, config, device="cuda:0"):
     loss_fct = nn.CrossEntropyLoss(reduction='none')
     start_time = time.time()
     for step, (X, Y, loss_mask, pixel_values) in enumerate(train_loader):
-        X = X.to(config.training.device)
-        Y = Y.to(config.training.device)
-        loss_mask = loss_mask.to(config.training.device)
-        pixel_values = pixel_values.to(config.training.device)
+        X = X.to(device)
+        Y = Y.to(device)
+        loss_mask = loss_mask.to(device)
+        pixel_values = pixel_values.to(device)
         lr = get_lr(epoch * iter_per_epoch + step, config.training.num_epochs * iter_per_epoch, config.training.learning_rate)
         for param_group in optimizer.param_groups:
             param_group['lr'] = lr
@@ -81,20 +121,20 @@ def train_epoch(epoch, swanlab_run, config):
 
             loss = (loss * loss_mask).sum() / loss_mask.sum()
             loss += res.aux_loss
-            loss = loss / config.training.accumulation_steps
+            loss = loss / config.training.gradient_accumulation_steps
 
         scaler.scale(loss).backward()
 
-        if (step + 1) % config.training.accumulation_steps == 0:
+        if (step + 1) % config.training.gradient_accumulation_steps == 0:
             scaler.unscale_(optimizer)
-            torch.nn.utils.clip_grad_norm_(model.parameters(), config.training.grad_clip)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), config.training.max_grad_norm)
 
             scaler.step(optimizer)
             scaler.update()
 
             optimizer.zero_grad(set_to_none=True)
 
-        if step % config.checkpoints.log_interval == 0:
+        if step % config.checkpoints.logging_steps == 0:
             spend_time = time.time() - start_time
             Logger(
                 'Epoch:[{}/{}]({}/{}) loss:{:.3f} lr:{:.7f} epoch_Time:{}min:'.format(
@@ -115,7 +155,7 @@ def train_epoch(epoch, swanlab_run, config):
                     "step": step
                 })
 
-        if (step + 1) % config.checkpoints.save_interval == 0 and (not ddp or dist.get_rank() == 0):
+        if (step + 1) % config.checkpoints.save_steps == 0 and (not ddp or dist.get_rank() == 0):
             model.eval()
             moe_path = '_moe' if config.model.use_moe else ''
             ckp = f'{config.checkpoints.output_dir}/pretrain_vlm_{config.model.hidden_size}{moe_path}.pth'
@@ -132,20 +172,26 @@ def train_epoch(epoch, swanlab_run, config):
 
 
 def init_model(config):
+    # 创建默认的VLM配置
     model_config = VLMConfig(
-        hidden_size=config.model.hidden_size, 
-        num_hidden_layers=config.model.num_hidden_layers,
-        max_seq_len=config.model.max_seq_len,
-        use_moe=config.model.use_moe
+        hidden_size=512, 
+        num_hidden_layers=8,
+        max_seq_len=config.data.max_seq_length,
+        use_moe=False
     )
     
     tokenizer = AutoTokenizer.from_pretrained('../model', use_fast=True)
     moe_path = '_moe' if model_config.use_moe else ''
     # 加载纯语言模型权重
-    ckp = f'{config.model.llm_weights_dir}/llm_{model_config.hidden_size}{moe_path}.pth'
-    model = MiniMindVLM(model_config, vision_model_path=config.model.vision_model_path)
-    state_dict = torch.load(ckp, map_location=config.training.device)
-    model.load_state_dict(state_dict, strict=False)
+    ckp = f'{config.checkpoints.output_dir}/llm_{model_config.hidden_size}{moe_path}.pth'
+    model = MiniMindVLM(model_config, vision_model_path="../model/vision_model/clip-vit-base-patch16")
+    
+    # 如果权重文件存在则加载
+    if os.path.exists(ckp):
+        state_dict = torch.load(ckp, map_location="cuda:0" if torch.cuda.is_available() else "cpu")
+        model.load_state_dict(state_dict, strict=False)
+    else:
+        print(f"警告: 权重文件 {ckp} 不存在，使用随机初始化")
 
     # 冻结除 vision_proj 外的所有参数
     for name, param in model.named_parameters():
@@ -154,8 +200,9 @@ def init_model(config):
 
     Logger(f'zerollm-v VLM可训练参数量：{sum(p.numel() for p in model.parameters() if p.requires_grad) / 1e6:.3f} 百万')
 
+    device = "cuda:0" if torch.cuda.is_available() else "cpu"
     _, preprocess = model.vision_encoder, model.processor
-    return model.to(config.training.device), tokenizer, preprocess, model_config
+    return model.to(device), tokenizer, preprocess, model_config
 
 
 def init_distributed_mode():
@@ -174,12 +221,8 @@ def load_config(config_path: str = "../configs/vlm_training.yaml"):
     """加载训练配置"""
     try:
         config_dict = load_yaml_config(config_path)
-        # 使用SimpleConfig如果没有pydantic验证
-        if hasattr(TrainingConfigModel, '__call__'):
-            return TrainingConfigModel(config_dict)
-        else:
-            # 使用验证模型
-            return TrainingConfigModel(**config_dict)
+        # 使用pydantic模型验证配置
+        return TrainingConfigModel(**config_dict)
     except Exception as e:
         print(f"错误: 无法加载配置文件 {config_path}: {e}")
         print("请确保配置文件存在且格式正确")
@@ -246,17 +289,18 @@ if __name__ == "__main__":
     os.makedirs(config.checkpoints.output_dir, exist_ok=True)
     
     # 设置设备
-    device_type = "cuda" if "cuda" in config.training.device else "cpu"
+    device = "cuda:0" if torch.cuda.is_available() else "cpu"
+    device_type = "cuda" if "cuda" in device else "cpu"
     
     # 设置上下文
     ctx = nullcontext() if device_type == "cpu" else torch.cuda.amp.autocast()
     
     # 分布式训练设置
     ddp = int(os.environ.get("RANK", -1)) != -1
-    ddp_local_rank, DEVICE = 0, config.training.device
+    ddp_local_rank, DEVICE = 0, device
     if ddp:
         init_distributed_mode()
-        config.training.device = torch.device(DEVICE)
+        device = torch.device(DEVICE)
     
     # 初始化SwanLab监控
     swanlab_run = None
@@ -267,12 +311,13 @@ if __name__ == "__main__":
     model, tokenizer, preprocess, model_config = init_model(config)
     
     # 创建数据集
+    images_path = config.data.data_path.replace('pretrain_data.jsonl', 'pretrain_images')
     train_ds = VLMDataset(
         config.data.data_path, 
-        config.data.images_path, 
+        images_path, 
         tokenizer, 
         preprocess=preprocess,
-        image_special_token=getattr(config.vlm_specific, 'image_special_token', '<image>') if hasattr(config, 'vlm_specific') else '<image>',
+        image_special_token='<image>',
         max_length=config.data.max_seq_length
     )
     
@@ -311,7 +356,7 @@ if __name__ == "__main__":
     
     for epoch in range(config.training.num_epochs):
         Logger(f"\n=== Epoch {epoch + 1}/{config.training.num_epochs} ====")
-        train_epoch(epoch, swanlab_run, config)
+        train_epoch(epoch, swanlab_run, config, device)
     
     print("\nzerollm-v VLM 训练完成!")
     if swanlab_run:

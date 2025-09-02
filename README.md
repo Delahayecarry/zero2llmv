@@ -55,6 +55,13 @@ pip install -e .
    # 放入您的语言模型权重和tokenizer文件
    ```
 
+3. **提供模型实现**:
+   ```bash
+   # 您需要创建 src/models/model_vlm.py 文件
+   # 包含 MiniMindVLM 和 VLMConfig 类的定义
+   # 详见 SETUP_MODELS.md 文档
+   ```
+
 ### 配置训练
 
 编辑 `configs/vlm_training.yaml` 文件：

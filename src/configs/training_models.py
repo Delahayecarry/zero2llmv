@@ -35,7 +35,7 @@ class DataConfigModel(BaseModel):
     """数据配置，包含路径和大小验证。"""
     
     data_path: str = Field(
-        default="data/processed",
+        default="../dataset/pretrain_data.jsonl",
         description="训练数据目录路径"
     )
     max_seq_length: int = Field(
